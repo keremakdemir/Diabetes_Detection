@@ -19,7 +19,7 @@ data_whole<-read_csv("diabetes.csv")
 
 Split data
 Split the data into a training (70% of the data) and test set (30% of the data)
-```{r, message=FALSE, warning=FALSE}
+```{r}
 library(caret)
 library(rsample)
 set.seed(14)
@@ -38,6 +38,11 @@ res <- cor(data_whole)
 #Plot the correlation matrix values by cluster
 corrplot(res, type = "upper", order = "hclust",
          tl.col = "black", tl.cex = 0.5)
+
+table(data_whole$Outcome)
+mean(data_whole$Outcome)#NIR
+
+table(data_whole$Outcome)/nrow(data_whole)
 ```
 
 
@@ -60,8 +65,15 @@ car::vif(glm)# a VIF value larger than 5 or 10 indicates a problematic amount of
 glm_prob <- predict(glm, test,type = "response")
 glm_pred <- rep(0, length(glm_prob))
 glm_pred[glm_prob > 0.5] <- 1
-mean(glm_pred != test$Outcome)
+error_glm<-mean(glm_pred != test$Outcome)
 
+confusionMatrix(data = test$Outcome, reference = factor(glm_pred))
+
+library(pROC)
+library(ggplot2)
+roccurve <- roc(response = test$Outcome, predictor = glm_prob)
+ggroc(roccurve, legacy.axes = TRUE, lwd=2) +theme_bw(base_size = 18)
+auc(roccurve)
 #yhat_glm<-predict(glm,test)
 #RMSE_glm<-sqrt(mean((test$shares - exp(yhat_lm))^2))
 ```
@@ -82,20 +94,21 @@ coef(backward, which.min(backward_summary$cp))
 coef(backward, which.max(backward_summary$adjr2))
 
 #get best subset of the specified size with min cp.
-sub <- backward_summary$which[which.min(backward_summary$cp), ]
-test_back <- test[, sub]
 # Create test model matrix, predcition, test error
-glm_prob <- predict(glm, test,type = "response")
-glm_pred <- rep(0, length(glm_prob))
-glm_pred[glm_prob > 0.5] <- 1
-mean(glm_pred != test$Outcome)
+sub <- backward_summary$which[which.min(backward_summary$cp), ]
+test_model <- model.matrix(Outcome~ ., data = test)
+test_back <- test_model[, sub]
+
+back_odds<-exp(test_back %*% coef(backward, which.min(backward_summary$cp)))
 
 
+back_prob<-back_odds/(1+back_odds)
 
-test_model <- model.matrix(log(shares)~ ., data = lmNewTest3)
-model <- test_model[, sub]
-yhat_back<-model %*% coef(backward, which.min(backward_summary$cp))
-RMSE_back<-sqrt(mean((test$shares - exp(yhat_back))^2))
+back_pred <- rep(0, length(back_prob))
+back_pred[back_prob > 0.5] <- 1
+error_back<-mean(back_pred != test$Outcome)
+
+
 ```
 
 ```{r}
@@ -114,6 +127,13 @@ tree_class <- rpart(
 )
 printcp(tree_class)
 cp <- tree_class$cptable
-tree_class_final <- prune(tree_class, cp = cp[3,1])
+tree_class_final <- prune(tree_class, cp = cp[4,1])#used minimum
 rpart.plot(tree_class_final)
+
+# test error rate using min cp
+tree_pred <- predict(tree_class_final, newdata=test, type = "class")
+klaR::errormatrix(true = test$Outcome, predicted = tree_pred, relative = TRUE)
 ```
+
+```{r}
+
