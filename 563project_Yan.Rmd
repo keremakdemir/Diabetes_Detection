@@ -14,7 +14,18 @@ Read data
 library(tidyverse)
 
 data_whole<-read_csv("diabetes.csv")
+names(data_whole)
 
+#data_whole%>%filter(data_whole$Glucose == 0)%>%nrow
+
+
+#data_whole$Glucose[data_whole$Glucose == 0] <- NA
+#data_whole$Insulin[data_whole$Insulin == 0] <- NA
+
+data_whole[,2:8][data_whole[,2:8]==0]<- NA
+
+sum(complete.cases(data_whole))
+data_clean<-na.omit(data_whole)
 ```
 
 Split data
@@ -56,6 +67,12 @@ train <- train %>%
   mutate(Outcome = as.factor(Outcome))
 test <- test %>% 
   mutate(Outcome = as.factor(Outcome))
+
+
+table(test$Outcome)
+```
+
+```{r}
 glm<- glm(Outcome~.,train,family="binomial")
 summary(glm)
 par(mfrow=c(2,2))
@@ -67,15 +84,20 @@ glm_pred <- rep(0, length(glm_prob))
 glm_pred[glm_prob > 0.5] <- 1
 error_glm<-mean(glm_pred != test$Outcome)
 
-confusionMatrix(data = test$Outcome, reference = factor(glm_pred))
+confusionMatrix(data = test$Outcome, reference = factor(glm_pred)) #?No Information Rate : 0.7749  
 
 library(pROC)
 library(ggplot2)
-roccurve <- roc(response = test$Outcome, predictor = glm_prob)
-ggroc(roccurve, legacy.axes = TRUE, lwd=2) +theme_bw(base_size = 18)
-auc(roccurve)
+roccurve_glm <- roc(response = test$Outcome, predictor = glm_prob)
+ggroc(roccurve_glm, legacy.axes = TRUE, lwd=2) +theme_bw(base_size = 18)
+auc(roccurve_glm)
 #yhat_glm<-predict(glm,test)
 #RMSE_glm<-sqrt(mean((test$shares - exp(yhat_lm))^2))
+```
+
+```{r}
+
+
 ```
 
 ```{r}
@@ -91,7 +113,6 @@ plot(backward_summary$bic, xlab = "Size", ylab = "backward bic", type = "l")
 plot(backward_summary$adjr2, xlab = "Size", ylab = "backward adjR2", type = "l")
 
 coef(backward, which.min(backward_summary$cp))
-coef(backward, which.max(backward_summary$adjr2))
 
 #get best subset of the specified size with min cp.
 # Create test model matrix, predcition, test error
@@ -101,12 +122,15 @@ test_back <- test_model[, sub]
 
 back_odds<-exp(test_back %*% coef(backward, which.min(backward_summary$cp)))
 
-
 back_prob<-back_odds/(1+back_odds)
 
-back_pred <- rep(0, length(back_prob))
-back_pred[back_prob > 0.5] <- 1
-error_back<-mean(back_pred != test$Outcome)
+roccurve_back <- roc(response = test$Outcome, predictor = back_prob)
+ggroc(roccurve_back, legacy.axes = TRUE, lwd=2) +theme_bw(base_size = 18)
+auc(roccurve_back)
+
+#back_pred <- rep(0, length(back_prob))
+#back_pred[back_prob > 0.5] <- 1
+#error_back<-mean(back_pred != test$Outcome)
 
 
 ```
@@ -132,8 +156,44 @@ rpart.plot(tree_class_final)
 
 # test error rate using min cp
 tree_pred <- predict(tree_class_final, newdata=test, type = "class")
+tree_prob <- predict(tree_class_final, newdata=test, type = "prob")
+
+roccurve_tree <- roc(response = test$Outcome, predictor = tree_prob[,2])
+ggroc(roccurve_tree, legacy.axes = TRUE, lwd=2) +theme_bw(base_size = 18)
+auc(roccurve_tree)
+
 klaR::errormatrix(true = test$Outcome, predicted = tree_pred, relative = TRUE)
 ```
 
 ```{r}
+cvcontrol <- trainControl(method = "repeatedcv",
+                          number = 10,
+                          allowParallel = TRUE)
+grid <- expand.grid(
+  n.trees = c(10, 50, 100, 500, 1000),
+  interaction.depth = c(1:3),
+  shrinkage = c(0.01, 0.05, 0.1),
+  n.minobsinnode = c(5,10)
+)
+capture <- capture.output(
+  train.gbm <- train(
+    Outcome ~ .,
+    data = train,
+    method = "gbm",
+    trControl = cvcontrol,
+    tuneGrid = grid
+  )
+)
+train.gbm
+
+boost_pred <- predict(train.gbm, newdata=test, type = "raw")
+boost_prob <- predict(train.gbm, newdata=test, type = "prob")
+
+roccurve_tree <- roc(response = test$Outcome, predictor = boost_prob[,2])
+ggroc(roccurve_tree, legacy.axes = TRUE, lwd=2) +theme_bw(base_size = 18)
+auc(roccurve_tree)
+
+klaR::errormatrix(true = test$Outcome, predicted = boost_pred, relative = TRUE)
+
+```
 
