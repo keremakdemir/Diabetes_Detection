@@ -25,11 +25,15 @@ names(data_whole)
 data_whole[,2:8][data_whole[,2:8]==0]<- NA
 
 sum(complete.cases(data_whole))
+library(naniar)
+vis_miss(data_whole)
+
+
 data_clean<-na.omit(data_whole)
 
+quantile(data_clean$Insulin, prob=c(.40,.5,.65))
 mean(data_clean$Insulin)
-median(data_clean$Insulin)
-
+sd(data_clean$Insulin)
 ```
 
 Split data
@@ -38,7 +42,7 @@ Split the data into a training (70% of the data) and test set (30% of the data)
 library(caret)
 library(rsample)
 set.seed(14)
-index <- initial_split(data_whole,
+index <- initial_split(data_clean,
                        prop = 0.7)
 train <- training(index)
 test <- testing(index)
@@ -48,16 +52,16 @@ Data Plots
 
 ```{r}
 library(corrplot)
-res <- cor(data_whole)
+res <- cor(data_clean)
 
 #Plot the correlation matrix values by cluster
 corrplot(res, type = "upper", order = "hclust",
          tl.col = "black", tl.cex = 0.5)
 
-table(data_whole$Outcome)
-mean(data_whole$Outcome)#NIR
+table(data_clean$Outcome)
+mean(data_clean$Outcome)#NIR
 
-table(data_whole$Outcome)/nrow(data_whole)
+table(data_clean$Outcome)/nrow(data_clean)
 ```
 
 
@@ -75,26 +79,6 @@ test <- test %>%
 
 table(test$Outcome)
 ```
-
-```{r}
-glm_Glu<-glm(Outcome~Glucose,data_clean,family="binomial")
-plot(glm_Glu)
-
-glm_Glu_prob <- predict(glm_Glu, data_clean,type = "response")
-glm_Glu_pred <- rep(0, length(glm_Glu_prob))
-glm_Glu_pred[glm_Glu_prob > 0.5] <- 1
-error_glm_Glu<-mean(glm_Glu_pred != data_clean$Outcome)
-
-confusionMatrix(data = factor(data_clean$Outcome), reference = factor(glm_Glu_pred)) #?No Information Rate : 0.7749  
-
-library(pROC)
-library(ggplot2)
-roccurve_glm_Glu <- roc(response = data_clean$Outcome, predictor = glm_Glu_prob)
-ggroc(roccurve_glm_Glu, legacy.axes = TRUE, lwd=2) +theme_bw(base_size = 18)
-auc(roccurve_glm_Glu)
-
-```
-
 
 ```{r}
 glm<- glm(Outcome~.,train,family="binomial")
@@ -191,7 +175,7 @@ klaR::errormatrix(true = test$Outcome, predicted = tree_pred, relative = TRUE)
 
 ```{r}
 cvcontrol <- trainControl(method = "repeatedcv",
-                          number = 10,
+                          number = 5,
                           allowParallel = TRUE)
 grid <- expand.grid(
   n.trees = c(10, 50, 100, 500, 1000),
@@ -221,3 +205,20 @@ klaR::errormatrix(true = test$Outcome, predicted = boost_pred, relative = TRUE)
 
 ```
 
+
+```{r}
+#random forests model
+library(randomForest)
+randomF<-randomForest(Outcome~., data=train, mtry=3, importance=TRUE)
+randomF
+
+randomF_pred <- predict(randomF, newdata=test, type = "response")
+randomF_prob <- predict(randomF, newdata=test, type = "prob")
+
+roccurve_randomF <- roc(response = test$Outcome, predictor = randomF_prob[,2])
+ggroc(roccurve_randomF, legacy.axes = TRUE, lwd=2) +theme_bw(base_size = 18)
+auc(roccurve_randomF)
+
+varImpPlot(randomF)
+klaR::errormatrix(true = test$Outcome, predicted = randomF_pred, relative = TRUE)
+```
