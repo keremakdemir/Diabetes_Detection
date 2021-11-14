@@ -99,50 +99,46 @@ library(pROC)
 library(ggplot2)
 roccurve_glm <- roc(response = test$Outcome, predictor = glm_prob)
 ggroc(roccurve_glm, legacy.axes = TRUE, lwd=2) +theme_bw(base_size = 18)
-auc(roccurve_glm)
+auc_glm<-auc(roccurve_glm)
 ```
 
+backward selection
 ```{r}
+back<-step(glm) #backward selection based on AIC 4 variables
+back
 
-
-```
-
-logistic regression after backward selection
-```{r}
-#backward selection after log transformation
-library(leaps)
-backward<- regsubsets(Outcome~., train, nvmax = 9, method = "backward")
-backward_summary<-summary(backward)
-
-#plot the changes in Cp,bic and adjR2 during selection,choose 4 varaibles as the best one
-par(mfrow=c(1,3))
-plot(backward_summary$cp, xlab = "Size", ylab = "backward Cp", type = "l")
-plot(backward_summary$bic, xlab = "Size", ylab = "backward bic", type = "l")
-plot(backward_summary$adjr2, xlab = "Size", ylab = "backward adjR2", type = "l")
-
-coef(backward, which.min(backward_summary$cp))
-
-#glm_back<-glm(Outcome~Glucose+SkinThickness+DiabetesPedigreeFunction+Age,data=train,family="binomial")
-
-
-#get best subset of the specified size with min cp.
-# Create test model matrix with selected variables only, predcition, test error
-sub <- backward_summary$which[which.min(backward_summary$cp), ]
-test_model <- model.matrix(Outcome~ ., data = test)
-test_back <- test_model[, sub]
-
-back_odds<-exp(test_back %*% coef(backward, which.min(backward_summary$cp)))
-
-back_prob<-back_odds/(1+back_odds)
-
+# predicted probability of back
+back_prob <- predict(back, test,type = "response")
+# ROC and its auc
 roccurve_back <- roc(response = test$Outcome, predictor = back_prob)
 ggroc(roccurve_back, legacy.axes = TRUE, lwd=2) +theme_bw(base_size = 18)
-auc(roccurve_back)
+auc_back<-auc(roccurve_back)
 
-#back_pred <- rep(0, length(back_prob))
-#back_pred[back_prob > 0.5] <- 1
-#error_back<-mean(back_pred != test$Outcome)
+# predicted outcome of glm
+back_pred <- rep(0, length(glm_prob))
+back_pred[back_prob > 0.5] <- 1
+accuracy_back<-mean(back_pred == test$Outcome)
 
+```
+
+best selection
+```{r}
+train_back<-as.data.frame(model.matrix(Outcome~.-1, data = train))
+library(bestglm)
+best<-bestglm(train_back, IC="AIC")
+best$BestModel
+
+# predicted probability of glm
+best_prob <- predict(best$BestModel, test,type = "response")
+# ROC and its auc
+roccurve_best <- roc(response = test$Outcome, predictor = best_prob)
+ggroc(roccurve_best, legacy.axes = TRUE, lwd=2) +theme_bw(base_size = 18)
+auc_best<-auc(roccurve_best)
+
+# predicted outcome of glm
+best_pred <- rep(0, length(glm_prob))
+best_pred[glm_prob > 0.5] <- 1
+accuracy_best<-mean(best_pred == test$Outcome)
 
 ```
 
@@ -168,11 +164,13 @@ rpart.plot(tree_class_final)
 
 # test error rate using min cp
 tree_pred <- predict(tree_class_final, newdata=test, type = "class")
+accuracy_tree<-mean(tree_pred == test$Outcome)
+
 tree_prob <- predict(tree_class_final, newdata=test, type = "prob")
 
 roccurve_tree <- roc(response = test$Outcome, predictor = tree_prob[,2])
 ggroc(roccurve_tree, legacy.axes = TRUE, lwd=2) +theme_bw(base_size = 18)
-auc(roccurve_tree)
+auc_tree<-auc(roccurve_tree)
 
 klaR::errormatrix(true = test$Outcome, predicted = tree_pred, relative = TRUE)
 ```
@@ -200,11 +198,14 @@ capture <- capture.output(
 train.gbm
 
 boost_pred <- predict(train.gbm, newdata=test, type = "raw")
+accuracy_boost<-mean(boost_pred == test$Outcome)
+
+
 boost_prob <- predict(train.gbm, newdata=test, type = "prob")
 
 roccurve_tree <- roc(response = test$Outcome, predictor = boost_prob[,2])
 ggroc(roccurve_tree, legacy.axes = TRUE, lwd=2) +theme_bw(base_size = 18)
-auc(roccurve_tree)
+auc_boost<-auc(roccurve_tree)
 
 klaR::errormatrix(true = test$Outcome, predicted = boost_pred, relative = TRUE)
 
@@ -218,11 +219,14 @@ randomF<-randomForest(Outcome~., data=train, mtry=3, importance=TRUE)
 randomF
 
 randomF_pred <- predict(randomF, newdata=test, type = "response")
+accuracy_boost<-mean(randomF_pred == test$Outcome)
+
+
 randomF_prob <- predict(randomF, newdata=test, type = "prob")
 
 roccurve_randomF <- roc(response = test$Outcome, predictor = randomF_prob[,2])
 ggroc(roccurve_randomF, legacy.axes = TRUE, lwd=2) +theme_bw(base_size = 18)
-auc(roccurve_randomF)
+auc_randomF<-auc(roccurve_randomF)
 
 varImpPlot(randomF)
 klaR::errormatrix(true = test$Outcome, predicted = randomF_pred, relative = TRUE)
@@ -258,15 +262,13 @@ tuned_knn <- train(
 knn_pred <- predict(tuned_knn,
                      newdata = test,
                      type = "raw")
+accuracy_knn<-mean(knn_pred == test$Outcome)
 
 knn_prob <- predict(tuned_knn,
                      newdata = test,
                      type = "prob")
-
-accuracy_knn<-mean(knn_pred == test$Outcome)
-
 roccurve_knn <- roc(response = test$Outcome, predictor = knn_prob[,2])
 ggroc(roccurve_knn, legacy.axes = TRUE, lwd=2) +theme_bw(base_size = 18)
-auc(roccurve_knn)
+auc_knn<-auc(roccurve_knn)
 ```
 
