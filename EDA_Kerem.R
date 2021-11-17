@@ -5,7 +5,7 @@ library(GGally)
 library(gridExtra)
 
 #Read data and check the first few rows
-diabetes <- read.csv(file='diabetes.csv', header=TRUE)
+diabetes <- read.csv(file='diabetes_corrected.csv', header=TRUE)
 head(diabetes)
 
 names(diabetes)[names(diabetes) == 'DiabetesPedigreeFunction'] <- 'DPF'
@@ -23,15 +23,15 @@ M<-cor(diabetes)
 corrplot(M, order = 'AOE')
 dev.off()
 
+#changing outcome to factor
+diabetes$Outcome <- as.factor(diabetes$Outcome)
+
 #pairs plot
 png(filename = "Pair_plot.png",width = 10, height = 10, units = 'in', res = 175)
 ggpairs(diabetes, aes(colour = Outcome, alpha = 0.4)) + theme_bw() + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
 dev.off()
 
-cat('There seems to be no strong correlation among different variables.')
-
-#changing outcome to factor
-diabetes$Outcome <- as.factor(diabetes$Outcome)
+cat('There seems to be no strong correlation among different variables other than insulin-glucose and BMI-skin thickness.')
 
 #plotting density graphs for predictors
 num_predictors <- length(diabetes)-1
@@ -62,5 +62,5 @@ box8 <- ggplot(diabetes, aes(x = Outcome, y = Age))+ geom_boxplot(aes(fill = Out
 grid.arrange(box1, box2, box3, box4, box5, box6, box7, box8, ncol=4)
 dev.off()
 
-cat('It seems like output is mostly correlated with glucose levels. Other revelant predictors might be pregnancies, body mass index, and age, but their predictive power may be lower than glucose levels. It makes sense that glucose levels are the leading predictor for diabetes detection.')
+cat('It seems like output is mostly related with glucose levels. Other revelant predictors might be pregnancies, body mass index, insulin, skin thickness, and age, but their predictive power may be lower than glucose levels. It makes sense that glucose levels are the leading predictor for diabetes detection.')
 
