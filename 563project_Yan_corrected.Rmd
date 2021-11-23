@@ -13,20 +13,18 @@ Read data and save a clean dataset after removing missing
 ```{r}
 library(tidyverse)
 
-data_whole<-read_csv("diabetes.csv")
-names(data_whole)
+data_whole<-read_csv("diabetes_corrected.csv")
+#names(data_whole)
 
 #visualize missing data
-data_whole[,2:8][data_whole[,2:8]==0]<- NA
-
-sum(complete.cases(data_whole))
+#data_whole[,2:8][data_whole[,2:8]==0]<- NA
 
 #visualize missing data
-library(naniar)
-vis_miss(data_whole)
+#library(naniar)
+#vis_miss(data_whole)
 
 #give NAs to 0s which are impossible
-data_clean<-na.omit(data_whole)
+#data_clean<-na.omit(data_whole)
 
 
 #quantile(data_clean$Insulin, prob=c(.40,.5,.65))
@@ -40,7 +38,7 @@ Split the data into a training (70% of the data) and test set (30% of the data)
 library(caret)
 library(rsample)
 set.seed(14)
-index <- initial_split(data_clean,
+index <- initial_split(data_whole,
                        prop = 0.7)
 train <- training(index)
 test <- testing(index)
@@ -49,16 +47,16 @@ test <- testing(index)
 Data Plots
 ```{r}
 library(corrplot)
-res <- cor(data_clean)
+res <- cor(data_whole)
 
 #Plot the correlation matrix values by cluster
 corrplot(res, type = "upper", order = "hclust",
          tl.col = "black", tl.cex = 0.5)
 
-table(data_clean$Outcome)
-mean(data_clean$Outcome)#NIR(66.8%), outcome has 262 "0" (66.8%) and 130 "1" (33.2%)
+#table(data_clean$Outcome)
+#mean(data_clean$Outcome)#NIR(66.8%), outcome has 262 "0" (66.8%) and 130 "1" (33.2%)
 
-table(data_clean$Outcome)/nrow(data_clean)
+#table(data_clean$Outcome)/nrow(data_clean)
 ```
 
 ```{r,fig1, fig.height = 20, fig.width = 20}
@@ -74,7 +72,8 @@ test <- test %>%
   mutate(Outcome = as.factor(Outcome))
 
 
-table(test$Outcome)
+#table(test$Outcome)
+
 ```
 
 logistical regression. No clear collinearity according to VIF.
@@ -92,8 +91,8 @@ glm_pred <- rep(0, length(glm_prob))
 glm_pred[glm_prob > 0.5] <- 1
 accuracy_glm<-mean(glm_pred == test$Outcome)
 
-confusionMatrix(data = test$Outcome, reference = factor(glm_pred)) #?No Information Rate : 0.7542   
-
+#glm_conf<-confusionMatrix(data =factor(glm_pred) , reference = test$Outcome)  
+#glm_conf$overall[[1]]
 #ROC and its AUC
 library(pROC)
 library(ggplot2)
@@ -159,11 +158,12 @@ tree_class <- rpart(
 )
 printcp(tree_class)
 cp <- tree_class$cptable
-tree_class_final <- prune(tree_class, cp = cp[4,1])#used minimum
+tree_class_final <- prune(tree_class, cp = cp[3,1])#used minimum
 rpart.plot(tree_class_final)
 
 # test error rate using min cp
 tree_pred <- predict(tree_class_final, newdata=test, type = "class")
+
 accuracy_tree<-mean(tree_pred == test$Outcome)
 
 tree_prob <- predict(tree_class_final, newdata=test, type = "prob")
@@ -173,6 +173,8 @@ ggroc(roccurve_tree, legacy.axes = TRUE, lwd=2) +theme_bw(base_size = 18)
 auc_tree<-auc(roccurve_tree)
 
 klaR::errormatrix(true = test$Outcome, predicted = tree_pred, relative = TRUE)
+confusionMatrix(tree_pred,test$Outcome)
+
 ```
 
 boost tree
@@ -207,7 +209,7 @@ roccurve_tree <- roc(response = test$Outcome, predictor = boost_prob[,2])
 ggroc(roccurve_tree, legacy.axes = TRUE, lwd=2) +theme_bw(base_size = 18)
 auc_boost<-auc(roccurve_tree)
 
-klaR::errormatrix(true = test$Outcome, predicted = boost_pred, relative = TRUE)
+#klaR::errormatrix(true = test$Outcome, predicted = boost_pred, relative = TRUE)
 
 ```
 
@@ -219,7 +221,7 @@ randomF<-randomForest(Outcome~., data=train, mtry=3, importance=TRUE)
 randomF
 
 randomF_pred <- predict(randomF, newdata=test, type = "response")
-accuracy_boost<-mean(randomF_pred == test$Outcome)
+accuracy_randomF<-mean(randomF_pred == test$Outcome)
 
 
 randomF_prob <- predict(randomF, newdata=test, type = "prob")
@@ -228,8 +230,8 @@ roccurve_randomF <- roc(response = test$Outcome, predictor = randomF_prob[,2])
 ggroc(roccurve_randomF, legacy.axes = TRUE, lwd=2) +theme_bw(base_size = 18)
 auc_randomF<-auc(roccurve_randomF)
 
-varImpPlot(randomF)
-klaR::errormatrix(true = test$Outcome, predicted = randomF_pred, relative = TRUE)
+varImpPlot(randomF)#Glucose is the most important one.
+#klaR::errormatrix(true = test$Outcome, predicted = randomF_pred, relative = TRUE)
 ```
 
 Knn
